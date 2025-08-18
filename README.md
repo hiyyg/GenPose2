@@ -149,33 +149,39 @@ bash scripts/eval_tracking.sh
 python runners/infer.py
 ```
 
-- ### Camera stream inference
+## 📷 Real-time camera stream inference
+Here we provide a script for real-time camera stream inference with the segmentation masks from [SAM2](https://github.com/Gy920/segment-anything-2-real-time). 
 
-First you have to download [this](https://github.com/Gy920/segment-anything-2-real-time) but you don't need to install it, and follow its instruction download its checkpoint of sam2.1_hiera_small.pt. 
+- ### Installation
+  First you have to download [SAM2](https://github.com/Gy920/segment-anything-2-real-time) to the base directory, and follow the instruction download the checkpoint `sam2.1_hiera_tiny.pt`.
 
 ```bash
 pip install -r requirements_camera.txt
 ```
 
-Fill the PARAMETERS part in runners/infer_camera.py.
-
-In the PARAMETERS part, you can turn the USE_CAM to change using camera flow or video, choose whether to save the camera flow or the infered video. We use D415 as default camera, fill your camera's serial number as the CAM_SERIAL_NUM in PARAMETERS part.
-
-If you want to infer the video, you have to provide a folder at least as the following format.(DATA_PATH is the video you provide, and the '_mask.png' is not necessary, it is used to visualize the mask).
-
+- ### Inference with RealSense D415 camera
+1. Set the `USE_CAM` in the `runners/infer_camera.py` file to `True`. If you want to save the camera stream, set `SAVE_CAM` to `True`.
+2. Fill in your camera's serial number in the `CAM_SERIAL_NUM`.
+3. If you want to save the inference results, set the `SAVE_RES` to `True`. But note that the inference speed may be affected.
+4. The `TRACKING` parameter is used to determine whether use tracking, which means use the pose in last frame as the initial pose. The `TRACKING_T0` parameter is to choose the tracking level. For more details, please see the comments in `runners/infer_camera.py` at the `PARAMETERS` part.
+5. Run the script:
 ``` bash
-DATA_PATH
-├── *_color.png
-├── *_depth.exr
-├── *_mask.exr
-└── *_meta.json
+python runners/infer_camera.py
 ```
-You can also download the example data we provided [here]()
 
-The TRACKING parameter is used to determine whether use tracking, which means use the pose in last frame as the initial pose. The TRACKING_T0 parameter is to choose the tracking level. there are also some to choose the path of saving.
-
-For more details, please see the comments in runners/infer_camera.py at the PARAMETERS part.
-
+- ### Inference with video stream
+1. Download the example data [here](https://www.dropbox.com/scl/fo/o09kj5r1b2bidxsuimh70/AJ9xfeHBMVeLhjUC1HFoqAk?rlkey=wpnyxr17gl1c5enwv0zojqd9f&st=47o4ksfz&dl=0) to `results`, and organize the data structure as follows:
+``` bash
+results
+└── infer_res/0001/video_stream
+    ├── *_color.png
+    ├── *_depth.exr
+    ├── *_mask.exr
+    └── *_meta.json
+```
+2. Set the `USE_CAM` and `SAVE_CAM` in the `runners/infer_camera.py` file to `False`.
+3. The other parameters can be the same as [Inference with RealSense D415 camera](#inference-with-realsense-d415-camera).
+4. Run the script:
 ``` bash
 python runners/infer_camera.py
 ```

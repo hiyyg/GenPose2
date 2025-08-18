@@ -279,50 +279,43 @@ def visualize_pose(data:InferDataset, all_final_pose, all_final_length, visualiz
 
 def main():
     ######################################## PARAMETERS ########################################
-    USE_CAM = True                                            # Use camera or not,
-    # if use camera, when you have chosen the target object to track press 'q' to start tracking
-    # if you want to stop the tracking, press 'c' to stop it
-    # PRO = True                                                # Use two process to be faster or not
-
-    CNT = 5                                                     # save numbers
-
-    DATA_PATH = f'./example/{CNT:04d}/saved_cam_images'                              # Path to the images_data(only use it when USE_CAM is False)
-
-    CAM_SERIAL_NUM = "251622062545"                                        # Camera number, default is D415 of our camera, you can't use it directly.
-
-    SAVE_CAM = True                                          # Save camera images or not(only use it when USE_CAM is True)
-    SAVE_CAM_PATH = f'./example/{CNT:04d}/saved_cam_images'                      # Path to save camera images(only use it when SAVE_CAM is True)
-
-    SAVE_INFERED = True                                       # Save the infered images or not
-    SAVE_IMG_PATH = f'./example/{CNT:04d}/infered_images'                        # Path to save the infered images(only use it when SAVE_INFERED is True)
-    SAVE_VD_PATH = f'./example/{CNT:04d}/infered_videos'                         # Path to save the infered videos(only use it when SAVE_INFERED is True)
-
-
-    TRACKING = True                                           # Tracking mode
+    USE_CAM = True                                              # Use camera or not
+    SAVE_CAM = True                                             # Save camera images or not(only use it when USE_CAM is True)
+    SAVE_RES = True                                             # Save the infered images or not
+    DATA_POINT = 1                                              # The data point index
+    CAM_SERIAL_NUM = "251622062545"                             # Camera number, default is D415 of our camera, you can't use it directly.
 
     # Tracking parameter, if the relative pose between the current frame and the previous frame
     # is large, such as low video FPS or fast object motion, you can set a larger value. The default
-    # TRACKING_TO is set to 0.15.
+    # TRACKING_T0 is set to 0.15.
+    TRACKING = True                                             # Tracking mode
     TRACKING_T0 = 0.3
-
-    SCORE_MODEL_PATH='results/ckpts/ScoreNet/scorenet.pth'     # Path to the score model, default is the given trained checkpoint, needed to download
-    ENERGY_MODEL_PATH='results/ckpts/EnergyNet/energynet.pth'  # Path to the energy model
-    SCALE_MODEL_PATH='results/ckpts/ScaleNet/scalenet.pth'     # Path to the scale model
-    SAM2_PATH = './segment-anything-2-real-time/checkpoints/sam2.1_hiera_tiny.pt'  # Path to the sam2 model checkpoint you have downloaded
     ######################################## PARAMETERS ########################################
+
+
+    results_path = f'./results/infer_res/{DATA_POINT:04d}'      # Path to save infered results
+    score_model_path='results/ckpts/ScoreNet/scorenet.pth'     # Path to the score model, default is the given trained checkpoint, needed to download
+    energy_model_path='results/ckpts/EnergyNet/energynet.pth'  # Path to the energy model
+    scale_model_path='results/ckpts/ScaleNet/scalenet.pth'     # Path to the scale model
+    sam2_model_path = 'segment-anything-2-real-time/checkpoints/sam2.1_hiera_tiny.pt'  # Path to the sam2 model checkpoint you have downloaded
+    
+    data_path = f'{results_path}/video_stream'              # Path to the images_data(only use it when USE_CAM is False)
+    save_cam_stream_path = f'{results_path}/video_stream'   # Path to save camera images(only use it when SAVE_CAM is True)
+    save_res_img_path = f'{results_path}/infered_images'        # Path to save the infered images(only use it when SAVE_RES is True)
+    save_res_video_path = f'{results_path}/infered_videos'      # Path to save the infered videos(only use it when SAVE_RES is True)
 
     ''' load data '''
     # Get data from image file
     GenPose2 = create_genpose2(
-        score_model_path=SCORE_MODEL_PATH, 
-        energy_model_path=ENERGY_MODEL_PATH,
-        scale_model_path=SCALE_MODEL_PATH,
+        score_model_path=score_model_path, 
+        energy_model_path=energy_model_path,
+        scale_model_path=scale_model_path,
     )
-    if SAVE_INFERED:
-        os.makedirs(SAVE_IMG_PATH, exist_ok=True)
-        os.makedirs(SAVE_VD_PATH, exist_ok=True)
+    if SAVE_RES:
+        os.makedirs(save_res_img_path, exist_ok=True)
+        os.makedirs(save_res_video_path, exist_ok=True)
     if SAVE_CAM:
-        os.makedirs(SAVE_CAM_PATH, exist_ok=True)
+        os.makedirs(save_cam_stream_path, exist_ok=True)
 
     cur_cnt = -1
     PREV_POSE = None
@@ -339,28 +332,17 @@ def main():
         robot_cam_num = int(cam_serial_num[0])
         rotation_angle = 0
         mode = 'rgbd'
-        rs_streamer = RealSenseRobotStream(cam_serial_num, robot_cam_num, rotation_angle, mode ,use_sam=True, sam2_path=SAM2_PATH)
-        streamer = rs_streamer.stream(test=True, show_mask=False, save_path=SAVE_CAM_PATH if SAVE_CAM else None)
+        rs_streamer = RealSenseRobotStream(cam_serial_num, robot_cam_num, rotation_angle, mode ,use_sam=True, sam2_path=sam2_model_path)
+        streamer = rs_streamer.stream(test=True, show_mask=False, save_path=save_cam_stream_path if SAVE_CAM else None)
         obj_idxl = None
-        # import time
-        # las_time = time.time()
-        for index, (image, depth, masks, meta, obj_ids) in enumerate(tqdm(streamer)):
-            # continue
-            # print(f"get image and mask: {time.time()-las_time:.6f} seconds")
-            # las_time = time.time()
 
+        for index, (image, depth, masks, meta, obj_ids) in enumerate(tqdm(streamer)):
             if rs_streamer.if_init:
                 cur_cnt = index
-                # print(depth.shape)
                 depth = depth / 1000.0
-
-                # print(masks.shape)
                 mask = torch.zeros((1, 360, 640), dtype=torch.int32)
                 for i in range(masks.shape[0]):
                     mask[0][masks[i]] = i+1
-
-                # print(f"data calc1:{ time.time()-las_time:.6f} seconds")
-                # las_time = time.time()
 
                 data = InferDataset({
                     'color': image,
@@ -371,25 +353,14 @@ def main():
                     'obj_ids': obj_ids
                 },img_size=GenPose2.cfg.img_size, device=GenPose2.cfg.device, n_pts=GenPose2.cfg.num_points)
 
-                # print(f"get dataset: {time.time()-las_time:.6f} seconds")
-                # las_time = time.time()
-
                 obj_idxx = data.get_objects(only_idx=True)['idx']
-
-                # print(f"get objects: {time.time()-las_time:.6f} seconds")
-                # las_time = time.time()
-                # print(obj_idxx, obj_idxl)
+                
                 if obj_idxx.shape[0]:
                     if (PREV_POSE and (obj_idxx.shape != obj_idxl.shape or (obj_idxx!=obj_idxl).any())):
                         PREV_POSE = None
                     obj_idxl = obj_idxx
 
                     pose, length = GenPose2.inference(data, PREV_POSE, PREV_POSE and TRACKING, TRACKING_T0)
-
-                    # print(f"inference: {time.time()-las_time:.6f} seconds")
-                    # las_time = time.time()
-                    # print(data.color.shape)
-                    
                     yellow = np.full_like(data.color, (255, 255, 0), dtype=np.uint8)
 
                     # print(mask.shape)
@@ -412,8 +383,8 @@ def main():
                 color_image_w_pose = image
 
             cv2.imshow('rgb', color_image_w_pose)
-            if SAVE_INFERED:
-                cv2.imwrite(os.path.join(SAVE_IMG_PATH, f"infer_{index:04d}.png"), color_image_w_pose)
+            if SAVE_RES:
+                cv2.imwrite(os.path.join(save_res_img_path, f"infer_{index:04d}.png"), color_image_w_pose)
             key = cv2.waitKey(1) & 0xFF
             if key == ord('c'):               # press 'c' to stop tracking
                 break
@@ -426,8 +397,8 @@ def main():
         cv2.destroyAllWindows()    
 
     else:
-        color_images = sorted(glob.glob(DATA_PATH + '/*_color.png'))
-        os.makedirs(SAVE_IMG_PATH, exist_ok=True)
+        color_images = sorted(glob.glob(data_path + '/*_color.png'))
+        os.makedirs(save_res_img_path, exist_ok=True)
         
         obj_idxl = None
         for index, color_image in enumerate(tqdm(color_images)):
@@ -458,22 +429,22 @@ def main():
                 obj_idxl = obj_idxx
             color_image_w_pose = cv2.cvtColor(color_image_w_pose, cv2.COLOR_RGB2BGR)
             cv2.imshow('rgb', color_image_w_pose)
-            if SAVE_INFERED:
-                cv2.imwrite(os.path.join(SAVE_IMG_PATH, f"infer_{index:04d}.png"), color_image_w_pose)
+            if SAVE_RES:
+                cv2.imwrite(os.path.join(save_res_img_path, f"infer_{index:04d}.png"), color_image_w_pose)
             key = cv2.waitKey(1) & 0xFF
             if key == ord('c'):               # press 'c' to stop tracking
                 break
             elif key == ord('s'):             # press 's' to select a new target object
                 rs_streamer.reset_mask_selection()
-            if SAVE_INFERED:
-                cv2.imwrite(os.path.join(SAVE_IMG_PATH, f"infer_{index:04d}.png"), color_image_w_pose)
+            if SAVE_RES:
+                cv2.imwrite(os.path.join(save_res_img_path, f"infer_{index:04d}.png"), color_image_w_pose)
 
     # img names "infer_{index:04d}.png" and only use 0~{cur_cnt}
-    img_paths = sorted(glob.glob(os.path.join(SAVE_IMG_PATH, '*.png')))
+    img_paths = sorted(glob.glob(os.path.join(save_res_img_path, '*.png')))
     img_paths = img_paths[:cur_cnt + 1]
     # print(img_paths)
     frames = [imageio.imread(p) for p in img_paths]
-    save_mp4_path = os.path.join(SAVE_VD_PATH, 'output.mp4')
+    save_mp4_path = os.path.join(save_res_video_path, 'output.mp4')
     if not os.path.exists(os.path.dirname(save_mp4_path)):
         os.makedirs(os.path.dirname(save_mp4_path))
     imageio.mimsave(save_mp4_path, frames, fps=15)
